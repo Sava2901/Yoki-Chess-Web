@@ -1,5 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,34 +8,142 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Mail, Lock, Trophy, Calendar, TrendingUp } from 'lucide-react'
+import { supabase } from '../lib/supabaseClient'
+import { useToast } from '@/hooks/use-toast'
 
 export const Route = createFileRoute('/profile')({ 
   component: ProfilePage,
 })
 
 function ProfilePage() {
+  const { toast } = useToast()
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
 
-  const handleLogin = () => {
-    // TODO: Implement Supabase authentication
-    if (email && password) {
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error('Error fetching user:', error.message);
+        setIsLoggedIn(false);
+        return;
+      }
+      if (data.user) {
+        setEmail(data.user.email || '');
+        setUsername(data.user.user_metadata?.username || '');
+        setIsLoggedIn(true);
+      } else {
+        setIsLoggedIn(false);
+      }
+    };
+
+    fetchUser();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user;
+      setIsLoggedIn(!!currentUser);
+      if (currentUser) {
+        setEmail(currentUser.email || '');
+        setUsername(currentUser.user_metadata?.username || '');
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    })
+
+    if (error) {
+      console.error(error.message)
+      toast({
+        title: "Login Failed",
+        description: error.message,
+        variant: "destructive",
+      })
+    } else if (data.user) {
+      toast({
+        title: "Login Successful",
+        description: "Welcome back!",
+        variant: "success",
+      })
+      navigate({ to: '/' })
+    }
+  }
+
+  const handleSignUp = async () => {
+    if (!email || !password) return
+  
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          username: username,
+        }
+      }
+    })
+  
+    if (error) {
+      console.error('Signup error:', error.message)
+      toast({
+        title: "Sign Up Failed",
+        description: error.message,
+        variant: "destructive",
+      })
+      return
+    }
+  
+    if (data.user) {
+      toast({
+        title: "Sign Up Successful",
+        description: "Please check your email to verify your account.",
+        variant: "success",
+      })
       setIsLoggedIn(true)
     }
   }
 
-  const handleSignUp = () => {
-    // TODO: Implement Supabase user registration
-    if (email && password && username) {
-      setIsLoggedIn(true)
+  const handleOAuthLogin = async (provider: 'google' | 'github') => {
+    const { error } = await supabase.auth.signInWithOAuth({ provider })
+    if (error) {
+      console.error('OAuth error:', error.message)
+      toast({
+        title: "Login Failed",
+        description: error.message,
+        variant: "destructive",
+      })
     }
   }
 
-  const handleLogout = () => {
-    // TODO: Implement logout logic
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut()
+  
+    if (error) {
+      console.error('Logout error:', error.message)
+      toast({
+        title: "Logout Failed",
+        description: error.message,
+        variant: "destructive",
+      })
+      return
+    }
+  
+    toast({
+      title: "Logged Out",
+      description: "You have been successfully signed out.",
+      variant: "info",
+    })
     setIsLoggedIn(false)
     setEmail('')
     setPassword('')
@@ -128,10 +236,10 @@ function ProfilePage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4 mt-4">
-              <Button variant="outline">
+              <Button variant="outline" onClick={() => handleOAuthLogin('google')}>
                 Google
               </Button>
-              <Button variant="outline">
+              <Button variant="outline" onClick={() => handleOAuthLogin('github')}>
                 GitHub
               </Button>
             </div>
@@ -350,13 +458,15 @@ function ProfilePage() {
                 <CardTitle className="text-destructive">Danger Zone</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button variant="outline" onClick={handleLogout}>
-                  <Lock className="mr-2 h-4 w-4" />
-                  Sign Out
-                </Button>
-                <Button variant="destructive">
-                  Delete Account
-                </Button>
+                <div className="flex space-x-4">
+                  <Button variant="outline" onClick={handleLogout}>
+                    <Lock className="mr-2 h-4 w-4" />
+                    Sign Out
+                  </Button>
+                  <Button variant="destructive">
+                    Delete Account
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

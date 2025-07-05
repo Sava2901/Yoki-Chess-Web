@@ -121,13 +121,6 @@ export class ChessEngine {
   }
 }
 
-// Singleton instance for global use
-// export const chessEngine = new ChessEngine();
-
-// export function getEngine(): ChessEngine {
-//   return chessEngine;
-// }
-
 export function getEngine(): ChessEngine {
   return new ChessEngine();
 }

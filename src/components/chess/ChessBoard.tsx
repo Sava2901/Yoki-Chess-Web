@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { 
   fenToBoard, 
@@ -9,7 +9,8 @@ import {
   ChessPiece,
 } from '@/utils/chess'
 import { getLegalMovesForPiece } from '@/utils/moveValidator';
-import { validateAndExecuteMove } from '@/utils/engine';
+import { Chess } from 'chess.js';
+// import { validateAndExecuteMove } from '@/utils/engine';
 import { useToast } from '@/hooks/use-toast';
 import { useChessDrag, DragPreview } from '@/hooks/use-chess-drag.tsx';
 import { Piece } from './Piece';
@@ -38,42 +39,46 @@ export function ChessBoard({
   const { toast } = useToast()
   const [legalMoves, setLegalMoves] = useState<string[]>([]);
   const [internalSelectedSquare, setInternalSelectedSquare] = useState<string | null>(null)
+  const [internalFen, setInternalFen] = useState(fen);
+
+  useEffect(() => {
+    setInternalFen(fen);
+  }, [fen]);
 
   const handlePieceDragStart = useCallback((piece: ChessPiece, square: string) => {
     const colorMap = { w: 'white', b: 'black' };
     if (disabled || (playerColor && colorMap[piece.color] !== playerColor)) {
       return;
     }
-    const moves = getLegalMovesForPiece(fen, square);
+    const moves = getLegalMovesForPiece(internalFen, square);
     setLegalMoves(moves);
-  }, [fen, disabled, playerColor]);
+  }, [internalFen, disabled, playerColor]);
+
+  const handleMove = (from: string, to: string) => {
+    const chess = new Chess(internalFen);
+    const move = chess.move({ from, to, promotion: 'q' }); // Default promotion
+    if (move) {
+      setInternalFen(chess.fen());
+      onMove?.(from, to);
+    } else {
+      // Handle illegal move display if necessary
+      toast({
+        title: "Illegal Move",
+        description: "That move is not allowed.",
+        variant: "destructive",
+      })
+    }
+    setInternalSelectedSquare(null);
+    setLegalMoves([]);
+  }
 
   const { dragState, handlers: dragHandlers } = useChessDrag({
-    onMove: (from, to) => {
-      validateAndExecuteMove(
-        fen,
-        from,
-        to,
-        (result) => {
-          if (result.newFen) {
-            onMove?.(from, to);
-          }
-        },
-        (error) => {
-          console.error('Server validation failed:', error);
-          toast({
-            title: "Illegal Move",
-            description: "The server rejected the move.",
-            variant: "destructive",
-          })
-        }
-      );
-    },
+    onMove: handleMove,
     legalMoves,
     onDragStart: handlePieceDragStart,
   });
   
-  const board = fenToBoard(fen)
+  const board = fenToBoard(internalFen)
   const squares = getAllSquares()
   const currentSelected = selectedSquare || internalSelectedSquare
 
@@ -88,36 +93,25 @@ export function ChessBoard({
 
     const [rank, file] = squareToIndices(square)
     const piece = board[rank][file]
+    const colorMap = { w: 'white', b: 'black' };
 
     if (currentSelected) {
       if (legalMoves.includes(square)) {
         // Execute the move
-        validateAndExecuteMove(
-          fen,
-          currentSelected,
-          square,
-          (result) => {
-            if (result.newFen) {
-              onMove?.(currentSelected, square);
-            }
-          },
-          (error) => {
-            console.error('Server validation failed:', error);
-            toast({
-              title: "Illegal Move",
-              description: "The server rejected the move.",
-              variant: "destructive",
-            })
-          }
-        );
-        setInternalSelectedSquare(null);
-        setLegalMoves([]);
+        handleMove(currentSelected, square);
       } else {
         // Clicked on a non-legal square, so deselect or change selection
         if (piece) {
-          setInternalSelectedSquare(square);
-          const moves = getLegalMovesForPiece(fen, square);
-          setLegalMoves(moves);
+          if (playerColor && colorMap[piece.color] !== playerColor) {
+            // Clicked on opponent's piece, so deselect
+            setInternalSelectedSquare(null);
+            setLegalMoves([]);
+          } else {
+            // Clicked on one of their own pieces, change selection
+            setInternalSelectedSquare(square);
+            const moves = getLegalMovesForPiece(internalFen, square);
+            setLegalMoves(moves);
+          }
         } else {
           setInternalSelectedSquare(null);
           setLegalMoves([]);
@@ -125,11 +119,14 @@ export function ChessBoard({
       }
     } else if (piece) {
       // No piece selected, so select this one
+      if (playerColor && colorMap[piece.color] !== playerColor) {
+        return;
+      }
       setInternalSelectedSquare(square);
-      const moves = getLegalMovesForPiece(fen, square);
+      const moves = getLegalMovesForPiece(internalFen, square);
       setLegalMoves(moves);
     }
-  }, [board, currentSelected, disabled, onMove, legalMoves, fen, toast])
+  }, [board, currentSelected, disabled, onMove, legalMoves, internalFen, toast, playerColor])
 
 
 
