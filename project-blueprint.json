@@ -1,0 +1,153 @@
+{
+  "name": "Yoki-Chess-Web",
+  "description": "Browser-based chess application for desktop and mobile web. Supports multiplayer and backend-powered engine analysis. Built using React and hosted via Supabase.",
+  "targets": {
+    "platforms": ["web"],
+    "modes": ["online", "multiplayer"]
+  },
+  "design_principles": {
+    "responsive_ui": true,
+    "mobile_first": true,
+    "progressive_enhancement": true,
+    "accessibility_compliance": true
+  },
+  "tech_stack": {
+    "frontend": {
+      "framework": "React",
+      "styling": "Tailwind CSS",
+      "ui_library": "shadcn/ui",
+      "routing": "Tanstack Router",
+      "state_management": "Zustand",
+      "build_tool": "Vite",
+      "pwa_support": false
+    },
+    "backend": {
+      "platform": "Supabase",
+      "database": "PostgreSQL",
+      "auth": "Supabase Auth (email, OAuth)",
+      "realtime": "Supabase Realtime (Postgres-based WebSocket pub/sub)",
+      "api": {
+        "type": "Edge Functions (Deno)",
+        "endpoints": [
+          "/analyze",
+          "/move",
+          "/start",
+          "/resign",
+          "/engine-eval",
+          "/get-game",
+          "/create-game",
+          "/join-game"
+        ]
+      },
+      "storage": {
+        "type": "Supabase Storage",
+        "usage": ["avatar uploads", "game PGN exports"]
+      }
+    }
+  },
+  "multiplayer": {
+    "provider": "Supabase Realtime",
+    "structure": {
+      "tables": {
+        "games": {
+          "columns": {
+            "id": "UUID",
+            "fen": "text",
+            "history": "text[]",
+            "player_white_id": "uuid",
+            "player_black_id": "uuid",
+            "status": "enum: waiting | playing | finished",
+            "winner": "uuid | null",
+            "last_move_time": "timestamp"
+          },
+          "realtime_enabled": true,
+          "row_level_security": true
+        },
+        "lobbies": {
+          "columns": {
+            "id": "UUID",
+            "created_by": "uuid",
+            "joined_by": "uuid | null",
+            "status": "enum: open | matched | closed",
+            "created_at": "timestamp"
+          }
+        }
+      }
+    }
+  },
+  "engine_integration": {
+    "protocol": "UCI (Universal Chess Interface)",
+    "access_points": {
+      "mobile": null,
+      "web": "Edge Function calls C++ binary on server (no WASM)",
+      "offline_mobile": false,
+      "offline_web": false
+    },
+    "engine_repo": "external (separate repository, called as CLI binary)"
+  },
+  "mobile_modes": null,
+  "directory_structure": {
+    "root": "Yoki-Chess-Web/",
+    "structure": {
+      "app/": {
+        "description": "Frontend code (React)",
+        "subdirs": {
+          "src/": {
+            "components/": "Reusable React components (e.g., ChessBoard, Clock)",
+            "pages/": "Pages for routes (Home, Match, Analysis, Profile)",
+            "hooks/": "Custom React hooks",
+            "utils/": "Helper utilities (e.g., FEN handling)",
+            "contexts/": "React contexts for state sharing"
+          }
+        }
+      },
+      "public/": {
+        "description": "Public static assets (e.g., icons, manifest.json)"
+      },
+      "supabase/": {
+        "description": "Backend configuration and Supabase-specific logic",
+        "functions/": {
+          "description": "Edge functions written in Deno",
+          "files": [
+            "analyze.ts",
+            "engine-eval.ts",
+            "create-game.ts",
+            "join-game.ts"
+          ]
+        },
+        "db/": {
+          "migrations.sql": "SQL schema for Supabase tables and triggers"
+        }
+      },
+      "package.json": "Project dependencies and scripts",
+      "vite.config.ts": "Frontend build configuration"
+    }
+  },
+  "build_targets": {
+    "web": "Deployed to Supabase Hosting (via Vite build)"
+  },
+  "dev_notes": {
+    "offline": {
+      "mobile": null,
+      "web": "Only limited offline use via localStorage, no engine eval offline"
+    },
+    "pwa": {
+      "status": "Not enabled",
+      "reason": "No WASM support for engine; mobile handles offline use case better"
+    },
+    "monorepo": {
+      "status": "Single repo for app + backend",
+      "chess_engine_repo": "Separate repo (called via CLI or native plugin)"
+    }
+  },
+  "roadmap": {
+    "milestones": [
+      "Scaffold React app with Vite",
+      "Setup Supabase project and tables (games, lobbies, users)",
+      "Integrate multiplayer sync using Supabase Realtime",
+      "Integrate Edge Functions to call external engine binary",
+      "Polish UI and finalize routes: home, match, analysis, profile",
+      "Test deployment on web"
+    ]
+  }
+}

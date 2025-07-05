@@ -1,0 +1,18 @@
+<svg width="3840" height="2160" viewBox="0 0 3840 2160" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="chessboard-light" patternUnits="userSpaceOnUse" width="160" height="160">
+      <!-- Light squares -->
+      <rect width="80" height="80" fill="#f8fafc" />
+      <rect x="80" y="80" width="80" height="80" fill="#f8fafc" />
+      <!-- Dark squares -->
+      <rect x="80" y="0" width="80" height="80" fill="#e2e8f0" />
+      <rect x="0" y="80" width="80" height="80" fill="#e2e8f0" />
+    </pattern>
+    <clipPath id="viewport-clip">
+      <rect width="3840" height="2160" />
+    </clipPath>
+  </defs>
+  
+  <!-- Chessboard pattern -->
+  <rect width="3840" height="2160" fill="url(#chessboard-light)" clip-path="url(#viewport-clip)" opacity="0.4" />
+</svg>
