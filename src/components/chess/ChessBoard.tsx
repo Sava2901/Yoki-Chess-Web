@@ -20,7 +20,7 @@ interface ChessBoardProps {
   fen?: string
   orientation?: 'white' | 'black'
   playerColor?: 'white' | 'black'
-  onMove?: (from: string, to: string) => void
+  onMove?: (from: string, to: string, promotion?: string) => void
   highlightedSquares?: string[]
   selectedSquare?: string
   disabled?: boolean
@@ -49,6 +49,7 @@ export function ChessBoard({
     to: string;
     color: 'w' | 'b';
     isClickMove: boolean;
+    position: { x: number; y: number };
   } | null>(null);
 
   const chess = useMemo(() => new Chess(fen), [fen]);
@@ -71,13 +72,26 @@ export function ChessBoard({
       ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'));
     
     if (isPromotion && !promotion) {
+      // Calculate position for promotion modal
+      const squareElement = document.querySelector(`[data-square="${to}"]`) as HTMLElement;
+      let position = { x: 0, y: 0 };
+      
+      if (squareElement) {
+        const rect = squareElement.getBoundingClientRect();
+        position = {
+          x: rect.left + rect.width / 2,
+          y: rect.top
+        };
+      }
+      
       // Show promotion modal
       setPromotionModal({
         isOpen: true,
         from,
         to,
         color: piece.color,
-        isClickMove
+        isClickMove,
+        position
       });
       return;
     }
@@ -92,12 +106,12 @@ export function ChessBoard({
         setTimeout(() => {
           setAnimatingMove(null);
           setLastMove({ from, to });
-          onMove?.(from, to);
+          onMove?.(from, to, promotion);
         }, 50);
       } else {
         // Immediate move for drag moves
         setLastMove({ from, to });
-        onMove?.(from, to);
+        onMove?.(from, to, promotion);
       }
     } else {
       // Handle illegal move display if necessary
@@ -276,6 +290,7 @@ export function ChessBoard({
         color={promotionModal?.color || 'w'}
         onPromotionSelect={handlePromotionSelect}
         onCancel={handlePromotionCancel}
+        position={promotionModal?.position}
       />
     </>
   )

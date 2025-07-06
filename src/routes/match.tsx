@@ -92,7 +92,7 @@ function MatchPage() {
     }
   }
 
-  const handleMove = (from: string, to: string) => {
+  const handleMove = (from: string, to: string, promotion?: string) => {
     let workingHistory = gameHistory
     
     // If we're viewing history (not at the latest position), we need to branch from current position
@@ -118,7 +118,7 @@ function MatchPage() {
       chess.loadPgn(tempChess.pgn())
     }
 
-    const move = chess.move({ from, to, promotion: 'q' })
+    const move = chess.move({ from, to, promotion: promotion || 'q' })
     if (move) {
       const newState: GameState = {
         fen: chess.fen(),

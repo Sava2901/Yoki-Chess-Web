@@ -64,7 +64,10 @@ function AnalysisPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex justify-center mb-4">
-                  <ChessBoard />
+                  <ChessBoard onMove={(from, to, promotion) => {
+          // Handle move in analysis mode if needed
+          console.log('Move in analysis:', { from, to, promotion });
+        }} />
                 </div>
                 <div className="flex justify-center space-x-2">
                   <Button variant="outline" size="sm">
