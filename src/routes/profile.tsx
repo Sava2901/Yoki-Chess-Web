@@ -5,11 +5,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { UserAvatar } from '@/components/ui/user-avatar'
 import { Badge } from '@/components/ui/badge'
-import { Mail, Lock, Trophy, Calendar, TrendingUp } from 'lucide-react'
+import { Mail, Lock, Trophy, Calendar, TrendingUp, Upload } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { supabase } from '../lib/supabaseClient'
 import { useToast } from '@/hooks/use-toast'
+import { Loader } from '@/components/ui/loader'
 
 export const Route = createFileRoute('/profile')({ 
   component: ProfilePage,
@@ -23,25 +35,40 @@ function ProfilePage() {
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchUser = async () => {
-      const { data, error } = await supabase.auth.getUser();
-      if (error) {
-        console.error('Error fetching user:', error.message);
+    const initializeAuth = async () => {
+      try {
+        // Get initial session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('Error getting session:', sessionError.message);
+          setIsLoggedIn(false);
+          setLoading(false);
+          return;
+        }
+
+        if (session?.user) {
+          setEmail(session.user.email || '');
+          setUsername(session.user.user_metadata?.username || '');
+          setAvatarUrl(session.user.user_metadata?.avatar_url || null);
+          setIsLoggedIn(true);
+        } else {
+          setIsLoggedIn(false);
+        }
+        setLoading(false);
+      } catch (error: any) {
+        console.error('Auth initialization error:', error.message);
         setIsLoggedIn(false);
-        return;
-      }
-      if (data.user) {
-        setEmail(data.user.email || '');
-        setUsername(data.user.user_metadata?.username || '');
-        setIsLoggedIn(true);
-      } else {
-        setIsLoggedIn(false);
+        setLoading(false);
       }
     };
 
-    fetchUser();
+    initializeAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user;
@@ -49,7 +76,13 @@ function ProfilePage() {
       if (currentUser) {
         setEmail(currentUser.email || '');
         setUsername(currentUser.user_metadata?.username || '');
+        setAvatarUrl(currentUser.user_metadata?.avatar_url || null);
+      } else {
+        setEmail('');
+        setUsername('');
+        setAvatarUrl(null);
       }
+      setLoading(false);
     });
 
     return () => {
@@ -126,6 +159,129 @@ function ProfilePage() {
     }
   }
 
+  const handleDeleteAccount = async () => {
+    const { error } = await supabase.functions.invoke('delete-user', {
+      method: 'POST',
+    })
+
+    if (error) {
+      console.error('Delete account error:', error.message)
+      toast({
+        title: "Delete Account Failed",
+        description: error.message,
+        variant: "destructive",
+      })
+      return
+    }
+
+    toast({
+      title: "Account Deleted",
+      description: "Your account has been permanently deleted.",
+      variant: "info",
+    })
+    setIsLoggedIn(false)
+    setEmail('')
+    setPassword('')
+    setUsername('')
+    setAvatarUrl(null)
+  }
+
+  const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true)
+  
+      // Check if user is authenticated first
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session?.user) {
+        throw new Error('You must be signed in to upload an avatar.')
+      }
+
+      const user = session.user
+  
+      // Remove old avatar if it exists
+      const currentAvatarUrl = user.user_metadata.avatar_url
+      if (currentAvatarUrl) {
+        const match = currentAvatarUrl.match(/avatars\/(.+)$/)
+        if (match && match[1]) {
+          const oldFilePath = match[1]
+          await supabase.storage.from('avatars').remove([oldFilePath])
+        }
+      }
+  
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error('You must select an image to upload.')
+      }
+  
+      const file = event.target.files[0]
+      
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        throw new Error('Please select a valid image file.')
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('File size must be less than 5MB.')
+      }
+      
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`
+      const filePath = "1oj01fe/" + fileName
+  
+      // Upload file to storage
+      const { error: uploadError } = await supabase
+        .storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
+  
+      if (uploadError) {
+        throw uploadError
+      }
+  
+      // Get public URL
+      const { data: { publicUrl } } = supabase
+        .storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+  
+      // Update user metadata
+      const { error: updateUserError } = await supabase.auth.updateUser({
+        data: { avatar_url: publicUrl }
+      })
+      
+      if (updateUserError) {
+        throw updateUserError
+      }
+
+      // Update local state
+      setAvatarUrl(publicUrl)
+      
+      toast({
+        title: "Avatar Updated",
+        description: "Your profile picture has been updated successfully.",
+        variant: "default"
+      })
+  
+    } catch (error: any) {
+      console.error('Avatar upload error:', error)
+      toast({
+        title: "Upload Failed",
+        description: error.message || 'Failed to upload avatar. Please try again.',
+        variant: "destructive"
+      })
+    } finally {
+      setUploading(false)
+      // Reset the input
+      if (event.target) {
+        event.target.value = ''
+      }
+    }
+  }  
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut()
   
@@ -148,6 +304,15 @@ function ProfilePage() {
     setEmail('')
     setPassword('')
     setUsername('')
+    setAvatarUrl(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="container h-[80vh] mx-auto flex justify-center content-center">
+        <Loader />
+      </div>
+    )
   }
 
   if (!isLoggedIn) {
@@ -263,14 +428,34 @@ function ProfilePage() {
             {/* Profile Header */}
             <Card>
               <CardContent className="pt-6">
-                <div className="flex items-center space-x-4">
-                  <Avatar className="h-20 w-20">
-                    <AvatarImage src="/placeholder-avatar.jpg" />
-                    <AvatarFallback className="text-lg">
-                      {username.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="space-y-1">
+                <div className="flex items-start space-x-6">
+                  <div className="flex flex-col items-center space-y-3">
+                    <UserAvatar
+                      src={avatarUrl}
+                      username={username}
+                      email={email}
+                      size="xl"
+                      uploading={uploading}
+                    />
+                    <label 
+                      htmlFor="avatar-upload" 
+                      className={`bg-primary text-primary-foreground rounded-md px-4 py-2 cursor-pointer hover:bg-primary/90 transition-colors text-sm font-medium flex items-center space-x-2 ${
+                        uploading ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      <Upload className="h-4 w-4" />
+                      <span>{uploading ? 'Uploading...' : 'Change Avatar'}</span>
+                      <input 
+                        id="avatar-upload" 
+                        type="file" 
+                        className="hidden" 
+                        onChange={uploadAvatar} 
+                        disabled={uploading}
+                        accept="image/*"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex-1 space-y-1">
                     <h2 className="text-2xl font-bold">{username || 'Chess Player'}</h2>
                     <p className="text-muted-foreground flex items-center">
                       <Mail className="mr-1 h-4 w-4" />
@@ -463,9 +648,24 @@ function ProfilePage() {
                     <Lock className="mr-2 h-4 w-4" />
                     Sign Out
                   </Button>
-                  <Button variant="destructive">
-                    Delete Account
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive">Delete Account</Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action cannot be undone. This will permanently delete your
+                          account and remove your data from our servers.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteAccount}>Continue</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </CardContent>
             </Card>
