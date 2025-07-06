@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,15 +8,61 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChessBoard } from '@/components/chess/ChessBoard'
 import { GameClock } from '@/components/chess/GameClock'
 import { MoveHistory } from '@/components/chess/MoveHistory'
+import { UserAvatar } from '@/components/ui/user-avatar'
+import { supabase } from '@/lib/supabaseClient'
 import { Plus, Search, Users } from 'lucide-react'
+import { Chess } from 'chess.js'
+import { STARTING_FEN } from '@/utils/chess'
 
 export const Route = createFileRoute('/match')({ 
   component: MatchPage,
 })
 
+interface GameState {
+  fen: string
+  moves: string[]
+  pgn: string
+}
+
 function MatchPage() {
   const [gameId, setGameId] = useState('')
   const [isInGame, setIsInGame] = useState(false)
+  const [playerColor] = useState<'white' | 'black'>('white') // You are playing as white by default
+  const [userProfile, setUserProfile] = useState<{
+    username: string
+    avatarUrl: string | null
+  }>({ username: 'You', avatarUrl: null })
+  
+  // Game state management
+  const [chess] = useState(() => new Chess())
+  const [gameHistory, setGameHistory] = useState<GameState[]>([{
+    fen: STARTING_FEN,
+    moves: [],
+    pgn: ''
+  }])
+  const [currentMoveIndex, setCurrentMoveIndex] = useState(0)
+  const [displayFen, setDisplayFen] = useState(STARTING_FEN)
+  const [animatingMove, setAnimatingMove] = useState<{from: string, to: string} | null>(null)
+
+  // Load user profile data
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError || !session?.user) return
+        
+        const user = session.user
+        setUserProfile({
+          username: user.user_metadata?.username || 'You',
+          avatarUrl: user.user_metadata?.avatar_url || null
+        })
+      } catch (error) {
+        console.error('Error loading user profile:', error)
+      }
+    }
+
+    loadUserProfile()
+  }, [])
 
   const handleCreateGame = () => {
     // TODO: Implement game creation logic
@@ -27,6 +73,91 @@ function MatchPage() {
     // TODO: Implement game joining logic
     if (gameId.trim()) {
       setIsInGame(true)
+    }
+  }
+
+  const handleMove = (from: string, to: string) => {
+    let workingHistory = gameHistory
+    
+    // If we're viewing history (not at the latest position), we need to branch from current position
+    if (currentMoveIndex < gameHistory.length - 1) {
+      // Truncate history to current position and continue from there
+      workingHistory = gameHistory.slice(0, currentMoveIndex + 1)
+      setGameHistory(workingHistory)
+    }
+    
+    // Load the current state we're working from
+    const currentState = workingHistory[workingHistory.length - 1]
+    chess.load(currentState.fen)
+    
+    // If we're not at the starting position, we need to replay moves to maintain history
+    if (currentState.moves.length > 0) {
+      // Reset chess to starting position and replay all moves
+      const tempChess = new Chess()
+      for (const moveStr of currentState.moves) {
+        tempChess.move(moveStr)
+      }
+      chess.load(tempChess.fen())
+      // Copy the move history
+      chess.loadPgn(tempChess.pgn())
+    }
+
+    const move = chess.move({ from, to, promotion: 'q' })
+    if (move) {
+      const newState: GameState = {
+        fen: chess.fen(),
+        moves: chess.history(),
+        pgn: chess.pgn()
+      }
+      
+      // Add new state to history
+      const newHistory = [...workingHistory, newState]
+      setGameHistory(newHistory)
+      setCurrentMoveIndex(newHistory.length - 1)
+      setDisplayFen(chess.fen())
+      
+      console.log('Move made:', move.san)
+    }
+  }
+
+  const handleMoveClick = (moveIndex: number) => {
+    // Handle special case for going back to starting position
+    if (moveIndex === -1) {
+      setCurrentMoveIndex(0)
+      setDisplayFen(STARTING_FEN)
+      chess.load(STARTING_FEN)
+      return
+    }
+    
+    // Convert move index to game history index (moveIndex + 1 because index 0 is starting position)
+    const targetHistoryIndex = moveIndex + 1
+    
+    if (targetHistoryIndex >= 0 && targetHistoryIndex < gameHistory.length) {
+      const targetState = gameHistory[targetHistoryIndex]
+      
+      // Calculate animation if moving forward by one move
+      if (targetHistoryIndex === currentMoveIndex + 1 && targetHistoryIndex > 0) {
+        // Get the move that was made to reach this state
+        const tempChess = new Chess(gameHistory[targetHistoryIndex - 1].fen)
+        const previousMoves = tempChess.history({ verbose: true })
+        tempChess.load(targetState.fen)
+        const currentMoves = tempChess.history({ verbose: true })
+        
+        if (currentMoves.length > previousMoves.length) {
+          const lastMove = currentMoves[currentMoves.length - 1]
+          setAnimatingMove({ from: lastMove.from, to: lastMove.to })
+          
+          // Clear animation after a short delay
+          setTimeout(() => {
+            setAnimatingMove(null)
+          }, 300)
+        }
+      }
+      
+      setCurrentMoveIndex(targetHistoryIndex)
+      setDisplayFen(targetState.fen)
+      // Update the chess engine to match the displayed position
+      chess.load(targetState.fen)
     }
   }
 
@@ -50,39 +181,62 @@ function MatchPage() {
               <CardContent className="p-2 sm:p-4 pb-8 sm:pb-10">
                 <ChessBoard 
                   size="md"
-                  onMove={(from, to) => {
-                    console.log('Move:', from, 'to', to)
-                  }}
+                  fen={displayFen}
+                  onMove={handleMove}
+                  disabled={currentMoveIndex < gameHistory.length - 1}
+                  externalAnimatingMove={animatingMove}
                 />
               </CardContent>
             </Card>
           </div>
 
           {/* Game Info Section */}
-          <div className="space-y-6">
+          <div className="flex flex-col h-full space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Players</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Opponent always on top */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-white border border-gray-400 rounded-full"></div>
-                    <span className="font-medium">You</span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">White</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-gray-800 rounded-full"></div>
+                  <div className="flex items-center space-x-3">
+                    <UserAvatar 
+                      src={undefined} // No profile picture for opponent
+                      username="Opponent"
+                      size="sm"
+                    />
                     <span className="font-medium">Opponent</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">Black</span>
+                  <span className="text-sm text-muted-foreground">
+                    {playerColor === 'white' ? 'Black' : 'White'}
+                  </span>
+                </div>
+                
+                {/* You always at the bottom */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <UserAvatar 
+                      src={userProfile.avatarUrl}
+                      username={userProfile.username}
+                      size="sm"
+                    />
+                    <span className="font-medium">{userProfile.username}</span>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {playerColor === 'white' ? 'White' : 'Black'}
+                  </span>
                 </div>
               </CardContent>
             </Card>
 
-            <MoveHistory moves={['e4', 'e5', 'Nf3', 'Nc6']} />
+            <div className="flex-1">
+              <MoveHistory 
+                moves={gameHistory[gameHistory.length - 1].moves}
+                currentMove={currentMoveIndex - 1}
+                onMoveClick={handleMoveClick}
+                className="h-full"
+              />
+            </div>
 
             <Card>
               <CardHeader>

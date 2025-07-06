@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { 
   fenToBoard, 
@@ -8,8 +8,8 @@ import {
   ChessSquare,
   ChessPiece,
 } from '@/utils/chess'
-import { getLegalMovesForPiece } from '@/utils/moveValidator';
-import { Chess } from 'chess.js';
+
+import { Chess, Square } from 'chess.js';
 // import { validateAndExecuteMove } from '@/utils/engine';
 import { useToast } from '@/hooks/use-toast';
 import { useChessDrag, DragPreview } from '@/hooks/use-chess-drag.tsx';
@@ -24,42 +24,55 @@ interface ChessBoardProps {
   selectedSquare?: string
   disabled?: boolean
   size?: 'sm' | 'md' | 'lg'
+  externalAnimatingMove?: {from: string, to: string} | null
 }
 
 export function ChessBoard({ 
   fen = STARTING_FEN,
   orientation = 'white',
-  playerColor,
   onMove,
   highlightedSquares = [],
   selectedSquare,
   disabled = false,
-  size = 'md'
+  size = 'md',
+  externalAnimatingMove = null
 }: ChessBoardProps) {
   const { toast } = useToast()
   const [legalMoves, setLegalMoves] = useState<string[]>([]);
   const [internalSelectedSquare, setInternalSelectedSquare] = useState<string | null>(null)
-  const [internalFen, setInternalFen] = useState(fen);
+  const [animatingMove, setAnimatingMove] = useState<{from: string, to: string} | null>(null);
+  const [lastMove, setLastMove] = useState<{from: string, to: string} | null>(null);
 
-  useEffect(() => {
-    setInternalFen(fen);
-  }, [fen]);
+  const chess = useMemo(() => new Chess(fen), [fen]);
 
   const handlePieceDragStart = useCallback((piece: ChessPiece, square: string) => {
     const colorMap = { w: 'white', b: 'black' };
-    if (disabled || (playerColor && colorMap[piece.color] !== playerColor)) {
+    if (disabled || colorMap[chess.turn()] !== colorMap[piece.color]) {
       return;
     }
-    const moves = getLegalMovesForPiece(internalFen, square);
+    const moves = chess.moves({ square: square as Square, verbose: true }).map(m => m.to);
     setLegalMoves(moves);
-  }, [internalFen, disabled, playerColor]);
+  }, [chess, disabled]);
 
-  const handleMove = (from: string, to: string) => {
-    const chess = new Chess(internalFen);
+  const handleMove = (from: string, to: string, isClickMove = false) => {
+    const chess = new Chess(fen);
     const move = chess.move({ from, to, promotion: 'q' }); // Default promotion
     if (move) {
-      setInternalFen(chess.fen());
-      onMove?.(from, to);
+      if (isClickMove) {
+        // Start animation for click moves
+        setAnimatingMove({ from, to });
+        
+        // Complete move after animation
+        setTimeout(() => {
+          setAnimatingMove(null);
+          setLastMove({ from, to });
+          onMove?.(from, to);
+        }, 50);
+      } else {
+        // Immediate move for drag moves
+        setLastMove({ from, to });
+        onMove?.(from, to);
+      }
     } else {
       // Handle illegal move display if necessary
       toast({
@@ -73,12 +86,12 @@ export function ChessBoard({
   }
 
   const { dragState, handlers: dragHandlers } = useChessDrag({
-    onMove: handleMove,
+    onMove: (from, to) => handleMove(from, to, false),
     legalMoves,
     onDragStart: handlePieceDragStart,
   });
   
-  const board = fenToBoard(internalFen)
+  const board = fenToBoard(fen)
   const squares = getAllSquares()
   const currentSelected = selectedSquare || internalSelectedSquare
 
@@ -89,44 +102,45 @@ export function ChessBoard({
   }
 
   const handleSquareClick = useCallback((square: string) => {
-    if (disabled) return
+    if (disabled) return;
 
-    const [rank, file] = squareToIndices(square)
-    const piece = board[rank][file]
-    const colorMap = { w: 'white', b: 'black' };
-
-    if (currentSelected) {
-      if (legalMoves.includes(square)) {
-        // Execute the move
-        handleMove(currentSelected, square);
-      } else {
-        // Clicked on a non-legal square, so deselect or change selection
-        if (piece) {
-          if (playerColor && colorMap[piece.color] !== playerColor) {
-            // Clicked on opponent's piece, so deselect
-            setInternalSelectedSquare(null);
-            setLegalMoves([]);
-          } else {
-            // Clicked on one of their own pieces, change selection
-            setInternalSelectedSquare(square);
-            const moves = getLegalMovesForPiece(internalFen, square);
-            setLegalMoves(moves);
-          }
-        } else {
-          setInternalSelectedSquare(null);
-          setLegalMoves([]);
-        }
-      }
-    } else if (piece) {
-      // No piece selected, so select this one
-      if (playerColor && colorMap[piece.color] !== playerColor) {
-        return;
-      }
-      setInternalSelectedSquare(square);
-      const moves = getLegalMovesForPiece(internalFen, square);
-      setLegalMoves(moves);
+    const handleSelectPiece = (sq: string) => {
+      setInternalSelectedSquare(sq);
+      const newMoves = chess.moves({ square: sq as Square, verbose: true }).map(m => m.to);
+      setLegalMoves(newMoves);
     }
-  }, [board, currentSelected, disabled, onMove, legalMoves, internalFen, toast, playerColor])
+
+    const handleDeselect = () => {
+      setInternalSelectedSquare(null);
+      setLegalMoves([]);
+    }
+
+    // Case 1: A move is being made (clicking on a legal destination square)
+    if (currentSelected && legalMoves.includes(square)) {
+      handleMove(currentSelected, square, true);
+      return;
+    }
+
+    const pieceOnSquare = chess.get(square as Square);
+
+    // Case 2: A piece is being selected or deselected
+    if (pieceOnSquare && pieceOnSquare.color === chess.turn()) {
+      if (currentSelected === square) {
+        handleDeselect();
+      } else {
+        handleSelectPiece(square);
+      }
+      return;
+    }
+
+    // Case 3: Clicking an empty square
+    if (!pieceOnSquare) {
+      handleDeselect();
+      return;
+    }
+
+    // Case 4: Clicking an opponent's piece (not as a capture) - do nothing.
+  }, [chess, currentSelected, disabled, handleMove, legalMoves]);
 
 
 
@@ -138,8 +152,19 @@ export function ChessBoard({
     const isSelected = currentSelected === squareNotation
     const isHighlighted = highlightedSquares.includes(squareNotation) || legalMoves.includes(squareNotation);
     const isDraggedFrom = dragState.draggedFrom === squareNotation
-    const isHovered = dragState.hoveredSquare === squareNotation && dragState.isDragging
+    const isAnimatingFrom = animatingMove?.from === squareNotation || externalAnimatingMove?.from === squareNotation
+    const isAnimatingTo = animatingMove?.to === squareNotation || externalAnimatingMove?.to === squareNotation
+    const isLastMoveFrom = lastMove?.from === squareNotation
+    const isLastMoveTo = lastMove?.to === squareNotation
     
+    let isGrabbable = false;
+    if (piece && !disabled) {
+      const pieceIsPlayers = chess.turn() === piece.color;
+      if (pieceIsPlayers) {
+        isGrabbable = currentSelected ? currentSelected === squareNotation : true;
+      }
+    }
+
     // Flip board for black orientation
     const displayIndex = orientation === 'black' ? 63 - index : index
     const displayRank = Math.floor(displayIndex / 8)
@@ -151,11 +176,11 @@ export function ChessBoard({
         key={squareNotation}
         data-square={squareNotation}
         className={cn(
-          'chess-square relative flex items-center justify-center cursor-pointer transition-all duration-200 aspect-square w-full h-full',
+          'chess-square relative flex items-center justify-center cursor-pointer aspect-square w-full h-full select-none',
           isSelected
             ? isLight ? 'bg-green-200' : 'bg-green-700'
             : isLight ? 'bg-amber-100' : 'bg-amber-800',
-          isHovered && 'ring-2 ring-yellow-400 ring-inset',
+          (isLastMoveFrom || isLastMoveTo) && !isSelected && (isLight ? 'bg-yellow-200' : 'bg-yellow-600'),
           disabled && 'cursor-not-allowed'
         )}
         onClick={() => handleSquareClick(squareNotation)}
@@ -178,12 +203,15 @@ export function ChessBoard({
         {piece && (
           <div
             className={cn(
-              'chess-piece select-none flex items-center justify-center w-full h-full cursor-grab active:cursor-grabbing',
+              'chess-piece select-none flex items-center justify-center w-full h-full transition-all duration-300',
+              isGrabbable && 'cursor-grab active:cursor-grabbing',
               isDraggedFrom && 'opacity-30',
+              isAnimatingFrom && 'transform scale-110 z-10',
+              isAnimatingTo && 'transform scale-110 z-10',
               disabled && 'cursor-not-allowed'
             )}
-            onMouseDown={(e) => dragHandlers.onDragStart(e, piece, squareNotation)}
-            onTouchStart={(e) => dragHandlers.onDragStart(e, piece, squareNotation)}
+            onMouseDown={(e) => isGrabbable && dragHandlers.onDragStart(e, piece, squareNotation)}
+            onTouchStart={(e) => isGrabbable && dragHandlers.onDragStart(e, piece, squareNotation)}
           >
             <Piece piece={piece} />
           </div>
@@ -200,7 +228,7 @@ export function ChessBoard({
 
   return (
     <>
-      <div className={cn('chess-board border-2 border-gray-800 rounded-lg overflow-hidden', sizeClasses[size])}>
+      <div className={cn('chess-board border-2 border-gray-800 rounded-lg overflow-hidden select-none', sizeClasses[size])}>
         {squares.map((square, index) => renderSquare(square, index))}
       </div>
       <DragPreview dragState={dragState} size={size} />

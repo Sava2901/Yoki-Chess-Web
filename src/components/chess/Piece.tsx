@@ -14,6 +14,7 @@ export function Piece({ piece }: PieceProps) {
       src={svgUrl}
       alt={`${piece.color} ${piece.type}`}
       className={cn('w-full h-full')}
+      onDragStart={(e) => e.preventDefault()} // Prevent image ghosting on drag
     />
   );
 }
