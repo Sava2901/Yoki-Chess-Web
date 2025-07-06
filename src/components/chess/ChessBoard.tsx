@@ -14,6 +14,7 @@ import { Chess, Square } from 'chess.js';
 import { useToast } from '@/hooks/use-toast';
 import { useChessDrag, DragPreview } from '@/hooks/use-chess-drag.tsx';
 import { Piece } from './Piece';
+import { PromotionModal } from './PromotionModal';
 
 interface ChessBoardProps {
   fen?: string
@@ -42,6 +43,13 @@ export function ChessBoard({
   const [internalSelectedSquare, setInternalSelectedSquare] = useState<string | null>(null)
   const [animatingMove, setAnimatingMove] = useState<{from: string, to: string} | null>(null);
   const [lastMove, setLastMove] = useState<{from: string, to: string} | null>(null);
+  const [promotionModal, setPromotionModal] = useState<{
+    isOpen: boolean;
+    from: string;
+    to: string;
+    color: 'w' | 'b';
+    isClickMove: boolean;
+  } | null>(null);
 
   const chess = useMemo(() => new Chess(fen), [fen]);
 
@@ -54,9 +62,27 @@ export function ChessBoard({
     setLegalMoves(moves);
   }, [chess, disabled]);
 
-  const handleMove = (from: string, to: string, isClickMove = false) => {
+  const handleMove = (from: string, to: string, isClickMove = false, promotion?: string) => {
     const chess = new Chess(fen);
-    const move = chess.move({ from, to, promotion: 'q' }); // Default promotion
+    
+    // Check if this is a pawn promotion move
+    const piece = chess.get(from as Square);
+    const isPromotion = piece?.type === 'p' && 
+      ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'));
+    
+    if (isPromotion && !promotion) {
+      // Show promotion modal
+      setPromotionModal({
+        isOpen: true,
+        from,
+        to,
+        color: piece.color,
+        isClickMove
+      });
+      return;
+    }
+    
+    const move = chess.move({ from, to, promotion: promotion || 'q' });
     if (move) {
       if (isClickMove) {
         // Start animation for click moves
@@ -84,6 +110,19 @@ export function ChessBoard({
     setInternalSelectedSquare(null);
     setLegalMoves([]);
   }
+
+  const handlePromotionSelect = (pieceType: 'q' | 'r' | 'b' | 'n') => {
+    if (promotionModal) {
+      handleMove(promotionModal.from, promotionModal.to, promotionModal.isClickMove, pieceType);
+      setPromotionModal(null);
+    }
+  };
+
+  const handlePromotionCancel = () => {
+    setPromotionModal(null);
+    setInternalSelectedSquare(null);
+    setLegalMoves([]);
+  };
 
   const { dragState, handlers: dragHandlers } = useChessDrag({
     onMove: (from, to) => handleMove(from, to, false),
@@ -232,6 +271,12 @@ export function ChessBoard({
         {squares.map((square, index) => renderSquare(square, index))}
       </div>
       <DragPreview dragState={dragState} size={size} />
+      <PromotionModal
+        isOpen={promotionModal?.isOpen || false}
+        color={promotionModal?.color || 'w'}
+        onPromotionSelect={handlePromotionSelect}
+        onCancel={handlePromotionCancel}
+      />
     </>
   )
 }

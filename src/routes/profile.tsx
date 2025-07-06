@@ -39,6 +39,55 @@ function ProfilePage() {
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  // Function to check for existing avatar in storage bucket
+  const checkStorageAvatar = async (userId: string): Promise<string | null> => {
+    try {
+      const { data: files, error } = await supabase.storage
+        .from('avatars')
+        .list('1oj01fe', {
+          limit: 100,
+          offset: 0
+        });
+
+      if (error || !files) {
+        return null;
+      }
+
+      // Look for files that start with the user ID
+      const userFile = files.find(file => file.name.startsWith(`${userId}-`));
+      
+      if (userFile) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(`1oj01fe/${userFile.name}`);
+        return publicUrl;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error checking storage avatar:', error);
+      return null;
+    }
+  };
+
+  // Function to determine the correct avatar URL based on priority
+  const determineAvatarUrl = async (user: any): Promise<string | null> => {
+    // Priority 1: Check storage bucket
+    const storageAvatarUrl = await checkStorageAvatar(user.id);
+    if (storageAvatarUrl) {
+      return storageAvatarUrl;
+    }
+
+    // Priority 2: Use social account avatar if available
+    const socialAvatarUrl = user.user_metadata?.avatar_url;
+    if (socialAvatarUrl) {
+      return socialAvatarUrl;
+    }
+
+    // Priority 3: No avatar (placeholder will be used by UserAvatar component)
+    return null;
+  };
+
   useEffect(() => {
     const initializeAuth = async () => {
       try {
@@ -55,7 +104,11 @@ function ProfilePage() {
         if (session?.user) {
           setEmail(session.user.email || '');
           setUsername(session.user.user_metadata?.username || '');
-          setAvatarUrl(session.user.user_metadata?.avatar_url || null);
+          
+          // Determine avatar URL based on priority
+          const avatarUrl = await determineAvatarUrl(session.user);
+          setAvatarUrl(avatarUrl);
+          
           setIsLoggedIn(true);
         } else {
           setIsLoggedIn(false);
@@ -76,7 +129,13 @@ function ProfilePage() {
       if (currentUser) {
         setEmail(currentUser.email || '');
         setUsername(currentUser.user_metadata?.username || '');
-        setAvatarUrl(currentUser.user_metadata?.avatar_url || null);
+        
+        // Only determine avatar URL on initial login, not on every auth change
+        if (_event === 'SIGNED_IN') {
+          determineAvatarUrl(currentUser).then(avatarUrl => {
+            setAvatarUrl(avatarUrl);
+          });
+        }
       } else {
         setEmail('');
         setUsername('');
@@ -189,23 +248,48 @@ function ProfilePage() {
   const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       setUploading(true)
+      console.log('Starting avatar upload...')
   
       // Check if user is authenticated first
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
-      if (sessionError || !session?.user) {
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        throw new Error(`Authentication error: ${sessionError.message}`)
+      }
+      
+      if (!session?.user) {
+        console.error('No user session found')
         throw new Error('You must be signed in to upload an avatar.')
       }
 
       const user = session.user
+      console.log('User authenticated:', user.id)
   
-      // Remove old avatar if it exists
-      const currentAvatarUrl = user.user_metadata.avatar_url
-      if (currentAvatarUrl) {
-        const match = currentAvatarUrl.match(/avatars\/(.+)$/)
-        if (match && match[1]) {
-          const oldFilePath = match[1]
-          await supabase.storage.from('avatars').remove([oldFilePath])
+      // Check for existing storage bucket avatar and remove it
+      console.log('Checking for existing avatar...')
+      const { data: files, error: listError } = await supabase.storage
+        .from('avatars')
+        .list('1oj01fe', {
+          limit: 100,
+          offset: 0
+        });
+
+      if (listError) {
+        console.error('Error listing files:', listError)
+        // Don't throw here, continue with upload
+      } else if (files) {
+        console.log('Files in storage:', files.length)
+        // Find and delete existing user avatar in storage
+        const existingFile = files.find(file => file.name.startsWith(`${user.id}-`));
+        if (existingFile) {
+          console.log('Deleting existing file:', existingFile.name)
+          const { error: deleteError } = await supabase.storage
+            .from('avatars')
+            .remove([`1oj01fe/${existingFile.name}`]);
+          if (deleteError) {
+            console.error('Error deleting existing file:', deleteError)
+          }
         }
       }
   
@@ -214,6 +298,7 @@ function ProfilePage() {
       }
   
       const file = event.target.files[0]
+      console.log('Selected file:', file.name, file.type, file.size)
       
       // Validate file type
       if (!file.type.startsWith('image/')) {
@@ -228,9 +313,11 @@ function ProfilePage() {
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}-${Date.now()}.${fileExt}`
       const filePath = "1oj01fe/" + fileName
+      console.log('Upload path:', filePath)
   
       // Upload file to storage
-      const { error: uploadError } = await supabase
+      console.log('Uploading file to storage...')
+      const { data: uploadData, error: uploadError } = await supabase
         .storage
         .from('avatars')
         .upload(filePath, file, {
@@ -239,26 +326,26 @@ function ProfilePage() {
         })
   
       if (uploadError) {
-        throw uploadError
+        console.error('Upload error:', uploadError)
+        throw new Error(`Upload failed: ${uploadError.message}`)
       }
+      
+      console.log('Upload successful:', uploadData)
   
       // Get public URL
       const { data: { publicUrl } } = supabase
         .storage
         .from('avatars')
         .getPublicUrl(filePath)
-  
-      // Update user metadata
-      const { error: updateUserError } = await supabase.auth.updateUser({
-        data: { avatar_url: publicUrl }
-      })
       
-      if (updateUserError) {
-        throw updateUserError
-      }
+      console.log('Public URL:', publicUrl)
+  
+      // Don't update user metadata with avatar_url anymore
+      // The storage bucket photo will take priority
 
       // Update local state
       setAvatarUrl(publicUrl)
+      console.log('Avatar URL updated in state')
       
       toast({
         title: "Avatar Updated",

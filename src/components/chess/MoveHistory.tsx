@@ -56,8 +56,8 @@ export function MoveHistory({
             </p>
           ) : (
             movePairs.map((pair, pairIndex) => (
-              <div key={pairIndex} className="flex items-center space-x-2 text-sm">
-                <span className="w-8 text-muted-foreground font-mono">
+              <div key={pairIndex} className="grid grid-cols-[auto_1fr_1fr] gap-2 items-center text-sm">
+                <span className="text-muted-foreground font-mono text-xs">
                   {pair.moveNumber}.
                 </span>
                 
@@ -65,7 +65,7 @@ export function MoveHistory({
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    'h-6 px-2 font-mono text-xs transition-colors',
+                    'h-6 w-16 px-1 font-mono text-xs transition-colors justify-start',
                     currentMove === pairIndex * 2 
                       ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
                       : 'hover:bg-muted'
@@ -75,12 +75,12 @@ export function MoveHistory({
                   {pair.white}
                 </Button>
                 
-                {pair.black && (
+                {pair.black ? (
                   <Button
                     variant="ghost"
                     size="sm"
                     className={cn(
-                      'h-6 px-2 font-mono text-xs transition-colors',
+                      'h-6 w-16 px-1 font-mono text-xs transition-colors justify-start',
                       currentMove === pairIndex * 2 + 1 
                         ? 'bg-primary text-primary-foreground hover:bg-primary/90' 
                         : 'hover:bg-muted'
@@ -89,6 +89,8 @@ export function MoveHistory({
                   >
                     {pair.black}
                   </Button>
+                ) : (
+                  <div className="w-16"></div>
                 )}
               </div>
             ))

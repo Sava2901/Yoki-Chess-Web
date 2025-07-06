@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChessBoard } from '@/components/chess/ChessBoard'
 import { GameClock } from '@/components/chess/GameClock'
 import { MoveHistory } from '@/components/chess/MoveHistory'
+import { GameResultModal, type GameResult } from '@/components/chess/GameResultModal'
+import { TimeControlSelector, type TimeControlOption } from '@/components/chess/TimeControlSelector'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { supabase } from '@/lib/supabaseClient'
 import { Plus, Search, Users } from 'lucide-react'
@@ -43,6 +45,17 @@ function MatchPage() {
   const [currentMoveIndex, setCurrentMoveIndex] = useState(0)
   const [displayFen, setDisplayFen] = useState(STARTING_FEN)
   const [animatingMove, setAnimatingMove] = useState<{from: string, to: string} | null>(null)
+  
+  // Game result state
+  const [gameResult, setGameResult] = useState<GameResult | null>(null)
+  const [showResultModal, setShowResultModal] = useState(false)
+  
+  // Timer state
+  const [whiteTime, setWhiteTime] = useState(600) // 10 minutes in seconds
+  const [blackTime, setBlackTime] = useState(600)
+  const [currentTurn, setCurrentTurn] = useState<'white' | 'black'>('white')
+  const [timeControl, setTimeControl] = useState({ minutes: 10, increment: 0 })
+  const [selectedTimeControl, setSelectedTimeControl] = useState('10+0')
 
   // Load user profile data
   useEffect(() => {
@@ -65,7 +78,10 @@ function MatchPage() {
   }, [])
 
   const handleCreateGame = () => {
-    // TODO: Implement game creation logic
+    // Apply selected time control
+    const totalSeconds = timeControl.minutes * 60
+    setWhiteTime(totalSeconds)
+    setBlackTime(totalSeconds)
     setIsInGame(true)
   }
 
@@ -117,7 +133,75 @@ function MatchPage() {
       setDisplayFen(chess.fen())
       
       console.log('Move made:', move.san)
+      
+      // Switch turns
+      setCurrentTurn(chess.turn() === 'w' ? 'white' : 'black')
+      
+      // Check for game ending conditions
+      checkGameEnd()
     }
+  }
+  
+  const checkGameEnd = () => {
+    if (chess.isGameOver()) {
+      let result: GameResult
+      
+      if (chess.isCheckmate()) {
+        // Checkmate - opposite of current turn wins
+        const winner = chess.turn() === 'w' ? 'black' : 'white'
+        result = { type: 'checkmate', winner }
+      } else if (chess.isStalemate()) {
+        result = { type: 'stalemate' }
+      } else if (chess.isDraw()) {
+        result = { type: 'draw' }
+      } else {
+        // Fallback to draw for other game over conditions
+        result = { type: 'draw' }
+      }
+      
+      setGameResult(result)
+      setShowResultModal(true)
+    }
+  }
+  
+  const handleTimeUp = (color: 'white' | 'black') => {
+    const winner = color === 'white' ? 'black' : 'white'
+    const result: GameResult = { type: 'timeout', winner }
+    setGameResult(result)
+    setShowResultModal(true)
+  }
+  
+  const handleResign = () => {
+    const winner = playerColor === 'white' ? 'black' : 'white'
+    const result: GameResult = { type: 'resignation', winner }
+    setGameResult(result)
+    setShowResultModal(true)
+  }
+  
+  const handleNewGame = () => {
+    // Reset game state
+    chess.reset()
+    setGameHistory([{
+      fen: STARTING_FEN,
+      moves: [],
+      pgn: ''
+    }])
+    setCurrentMoveIndex(0)
+    setDisplayFen(STARTING_FEN)
+    setGameResult(null)
+    setShowResultModal(false)
+    setCurrentTurn('white')
+    // Apply current time control settings
+    const totalSeconds = timeControl.minutes * 60
+    setWhiteTime(totalSeconds)
+    setBlackTime(totalSeconds)
+  }
+  
+  const handleReturnToLobby = () => {
+    setIsInGame(false)
+    setGameResult(null)
+    setShowResultModal(false)
+    handleNewGame()
   }
 
   const handleMoveClick = (moveIndex: number) => {
@@ -172,9 +256,19 @@ function MatchPage() {
                 <CardTitle className="flex items-center justify-between">
                   <span>Game in Progress</span>
                   <div className="flex items-center space-x-2">
-                    <GameClock time={600} isActive={true} />
+                    <GameClock 
+                      time={playerColor === 'white' ? whiteTime : blackTime} 
+                      isActive={currentTurn === playerColor && !gameResult} 
+                      onTimeUp={() => handleTimeUp(playerColor)}
+                      increment={timeControl.increment}
+                    />
                     <span className="text-muted-foreground">vs</span>
-                    <GameClock time={580} isActive={false} />
+                    <GameClock 
+                      time={playerColor === 'white' ? blackTime : whiteTime} 
+                      isActive={currentTurn !== playerColor && !gameResult}
+                      onTimeUp={() => handleTimeUp(playerColor === 'white' ? 'black' : 'white')}
+                      increment={timeControl.increment}
+                    />
                   </div>
                 </CardTitle>
               </CardHeader>
@@ -183,7 +277,7 @@ function MatchPage() {
                   size="md"
                   fen={displayFen}
                   onMove={handleMove}
-                  disabled={currentMoveIndex < gameHistory.length - 1}
+                  disabled={currentMoveIndex < gameHistory.length - 1 || !!gameResult}
                   externalAnimatingMove={animatingMove}
                 />
               </CardContent>
@@ -243,16 +337,33 @@ function MatchPage() {
                 <CardTitle>Game Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" disabled={!!gameResult}>
                   Offer Draw
                 </Button>
-                <Button variant="destructive" className="w-full">
+                <Button 
+                  variant="destructive" 
+                  className="w-full" 
+                  onClick={handleResign}
+                  disabled={!!gameResult}
+                >
                   Resign
                 </Button>
               </CardContent>
             </Card>
           </div>
         </div>
+        
+        <GameResultModal
+          isOpen={showResultModal}
+          result={gameResult}
+          playerColor={playerColor}
+          playerName={userProfile.username}
+          opponentName="Opponent"
+          playerAvatar={userProfile.avatarUrl}
+          onNewGame={handleNewGame}
+          onReturnToLobby={handleReturnToLobby}
+          onClose={() => setShowResultModal(false)}
+        />
       </div>
     )
   }
@@ -285,17 +396,20 @@ function MatchPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="time-control">Time Control</Label>
-                  <select 
-                    id="time-control" 
-                    className="w-full p-2 border rounded-md bg-background"
-                  >
-                    <option value="10+0">10 minutes</option>
-                    <option value="15+10">15 minutes + 10 seconds</option>
-                    <option value="30+0">30 minutes</option>
-                    <option value="unlimited">Unlimited</option>
-                  </select>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Time Control</Label>
+                    <TimeControlSelector
+                      selectedTimeControl={selectedTimeControl}
+                      onTimeControlChange={(control: TimeControlOption) => {
+                        setSelectedTimeControl(control.id)
+                        setTimeControl({
+                          minutes: control.minutes,
+                          increment: control.increment
+                        })
+                      }}
+                    />
+                  </div>
                 </div>
                 <Button onClick={handleCreateGame} className="w-full">
                   <Users className="mr-2 h-4 w-4" />
@@ -343,20 +457,57 @@ function MatchPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <div>
-                  <p className="font-medium">Player123</p>
-                  <p className="text-sm text-muted-foreground">10 minutes</p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <UserAvatar 
+                    src={undefined}
+                    username="Player123"
+                    size="sm"
+                  />
+                  <div>
+                    <p className="font-medium">Player123</p>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-muted-foreground">10 minutes</span>
+                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-full">Rapid</span>
+                    </div>
+                  </div>
                 </div>
-                <Button size="sm">Join</Button>
+                <Button size="sm" className="shrink-0">Join</Button>
               </div>
-              <div className="flex items-center justify-between p-3 border rounded-lg">
-                <div>
-                  <p className="font-medium">ChessMaster</p>
-                  <p className="text-sm text-muted-foreground">15+10</p>
+              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <UserAvatar 
+                    src={undefined}
+                    username="ChessMaster"
+                    size="sm"
+                  />
+                  <div>
+                    <p className="font-medium">ChessMaster</p>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-muted-foreground">15+10</span>
+                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-full">Rapid</span>
+                    </div>
+                  </div>
                 </div>
-                <Button size="sm">Join</Button>
+                <Button size="sm" className="shrink-0">Join</Button>
+              </div>
+              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <UserAvatar 
+                    src={undefined}
+                    username="SpeedDemon"
+                    size="sm"
+                  />
+                  <div>
+                    <p className="font-medium">SpeedDemon</p>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-muted-foreground">3+2</span>
+                      <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs rounded-full">Blitz</span>
+                    </div>
+                  </div>
+                </div>
+                <Button size="sm" className="shrink-0">Join</Button>
               </div>
             </div>
           </CardContent>
