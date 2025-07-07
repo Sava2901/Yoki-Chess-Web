@@ -58,25 +58,35 @@ function ProfilePage() {
           setEmail(session.user.email || '');
           setUsername(session.user.user_metadata?.username || '');
           
-          // Determine avatar URL based on priority
-          const avatarUrl = await determineAvatarUrl(session.user);
-          setAvatarUrl(avatarUrl);
+          // Determine avatar URL based on priority with timeout
+          try {
+            const avatarUrl = await Promise.race([
+              determineAvatarUrl(session.user),
+              new Promise<null>((_, reject) => 
+                setTimeout(() => reject(new Error('Avatar loading timeout')), 10000)
+              )
+            ]);
+            setAvatarUrl(avatarUrl);
+          } catch (avatarError) {
+            console.error('Avatar loading error:', avatarError);
+            setAvatarUrl(null);
+          }
           
           setIsLoggedIn(true);
         } else {
           setIsLoggedIn(false);
         }
-        setLoading(false);
       } catch (error: any) {
         console.error('Auth initialization error:', error.message);
         setIsLoggedIn(false);
+      } finally {
         setLoading(false);
       }
     };
 
     initializeAuth();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user;
       setIsLoggedIn(!!currentUser);
       if (currentUser) {
@@ -85,9 +95,18 @@ function ProfilePage() {
         
         // Only determine avatar URL on initial login, not on every auth change
         if (_event === 'SIGNED_IN') {
-          determineAvatarUrl(currentUser).then(avatarUrl => {
+          try {
+            const avatarUrl = await Promise.race([
+              determineAvatarUrl(currentUser),
+              new Promise<null>((_, reject) => 
+                setTimeout(() => reject(new Error('Avatar loading timeout')), 10000)
+              )
+            ]);
             setAvatarUrl(avatarUrl);
-          });
+          } catch (avatarError) {
+            console.error('Avatar loading error:', avatarError);
+            setAvatarUrl(null);
+          }
         }
       } else {
         setEmail('');
