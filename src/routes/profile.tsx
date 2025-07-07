@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { UserAvatar } from '@/components/ui/user-avatar'
+import { UserAvatar, determineAvatarUrl } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Mail, Lock, Trophy, Calendar, TrendingUp, Upload } from 'lucide-react'
 import {
@@ -39,54 +39,7 @@ function ProfilePage() {
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // Function to check for existing avatar in storage bucket
-  const checkStorageAvatar = async (userId: string): Promise<string | null> => {
-    try {
-      const { data: files, error } = await supabase.storage
-        .from('avatars')
-        .list('1oj01fe', {
-          limit: 100,
-          offset: 0
-        });
-
-      if (error || !files) {
-        return null;
-      }
-
-      // Look for files that start with the user ID
-      const userFile = files.find(file => file.name.startsWith(`${userId}-`));
-      
-      if (userFile) {
-        const { data: { publicUrl } } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(`1oj01fe/${userFile.name}`);
-        return publicUrl;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Error checking storage avatar:', error);
-      return null;
-    }
-  };
-
-  // Function to determine the correct avatar URL based on priority
-  const determineAvatarUrl = async (user: any): Promise<string | null> => {
-    // Priority 1: Check storage bucket
-    const storageAvatarUrl = await checkStorageAvatar(user.id);
-    if (storageAvatarUrl) {
-      return storageAvatarUrl;
-    }
-
-    // Priority 2: Use social account avatar if available
-    const socialAvatarUrl = user.user_metadata?.avatar_url;
-    if (socialAvatarUrl) {
-      return socialAvatarUrl;
-    }
-
-    // Priority 3: No avatar (placeholder will be used by UserAvatar component)
-    return null;
-  };
+  // Avatar utility functions are imported from avatar components
 
   useEffect(() => {
     const initializeAuth = async () => {

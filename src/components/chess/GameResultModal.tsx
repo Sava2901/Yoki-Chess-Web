@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Dialog, DialogContent } from '../ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { UserAvatar } from '@/components/ui/user-avatar'
+import { UserAvatar } from '@/components/ui/avatar'
 import { Trophy, Clock, HeartHandshake, Crown, Users, RotateCcw, Home } from 'lucide-react'
 import { cn } from '@/lib/utils'
 

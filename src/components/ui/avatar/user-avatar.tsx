@@ -1,4 +1,6 @@
-import { Avatar, AvatarFallback, AvatarImage } from './avatar'
+"use client"
+
+import { Avatar as AvatarPrimitive, AvatarImage, AvatarFallback } from './primitives'
 import { cn } from '@/lib/utils'
 
 interface UserAvatarProps {
@@ -45,7 +47,7 @@ export function UserAvatar({
 
   return (
     <div className="relative inline-block">
-      <Avatar className={cn(sizeClasses[size], className)}>
+      <AvatarPrimitive className={cn(sizeClasses[size], className)}>
         <AvatarImage 
           src={src || undefined} 
           alt={getAltText()}
@@ -57,7 +59,7 @@ export function UserAvatar({
         )}>
           {getFallbackText()}
         </AvatarFallback>
-      </Avatar>
+      </AvatarPrimitive>
       
       {uploading && (
         <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">

@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -10,8 +10,7 @@ import { GameClock } from '@/components/chess/GameClock'
 import { MoveHistory } from '@/components/chess/MoveHistory'
 import { GameResultModal, type GameResult } from '@/components/chess/GameResultModal'
 import { TimeControlSelector, type TimeControlOption } from '@/components/chess/TimeControlSelector'
-import { UserAvatar } from '@/components/ui/user-avatar'
-import { supabase } from '@/lib/supabaseClient'
+import { useUserProfile, GamePlayerCard, LobbyPlayerCard } from '@/components/ui/avatar'
 import { Plus, Search, Users } from 'lucide-react'
 import { Chess } from 'chess.js'
 import { STARTING_FEN } from '@/utils/chess'
@@ -30,10 +29,7 @@ function OnlineMatchPage() {
   const [gameId, setGameId] = useState('')
   const [isInGame, setIsInGame] = useState(false)
   const [playerColor] = useState<'white' | 'black'>('white') // You are playing as white by default
-  const [userProfile, setUserProfile] = useState<{
-    username: string
-    avatarUrl: string | null
-  }>({ username: 'You', avatarUrl: null })
+  const { userProfile } = useUserProfile()
   
   // Game state management
   const [chess] = useState(() => new Chess())
@@ -58,24 +54,7 @@ function OnlineMatchPage() {
   const [selectedTimeControl, setSelectedTimeControl] = useState('10+0')
 
   // Load user profile data
-  useEffect(() => {
-    const loadUserProfile = async () => {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        if (sessionError || !session?.user) return
-        
-        const user = session.user
-        setUserProfile({
-          username: user.user_metadata?.username || 'You',
-          avatarUrl: user.user_metadata?.avatar_url || null
-        })
-      } catch (error) {
-        console.error('Error loading user profile:', error)
-      }
-    }
-
-    loadUserProfile()
-  }, [])
+  // User profile is now loaded automatically by the useUserProfile hook
 
   const handleCreateGame = () => {
     // Apply selected time control
@@ -292,34 +271,20 @@ function OnlineMatchPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Opponent always on top */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <UserAvatar 
-                      src={undefined} // No profile picture for opponent
-                      username="Opponent"
-                      size="sm"
-                    />
-                    <span className="font-medium">Opponent</span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {playerColor === 'white' ? 'Black' : 'White'}
-                  </span>
-                </div>
+                <GamePlayerCard
+                  username="Opponent"
+                  avatarUrl={null}
+                  playerColor={playerColor === 'white' ? 'black' : 'white'}
+                  size="sm"
+                />
                 
                 {/* You always at the bottom */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <UserAvatar 
-                      src={userProfile.avatarUrl}
-                      username={userProfile.username}
-                      size="sm"
-                    />
-                    <span className="font-medium">{userProfile.username}</span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {playerColor === 'white' ? 'White' : 'Black'}
-                  </span>
-                </div>
+                <GamePlayerCard
+                  username={userProfile.username}
+                  avatarUrl={userProfile.avatarUrl}
+                  playerColor={playerColor}
+                  size="sm"
+                />
               </CardContent>
             </Card>
 
@@ -458,57 +423,30 @@ function OnlineMatchPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <UserAvatar 
-                    src={undefined}
-                    username="Player123"
-                    size="sm"
-                  />
-                  <div>
-                    <p className="font-medium">Player123</p>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-muted-foreground">10 minutes</span>
-                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-full">Rapid</span>
-                    </div>
-                  </div>
-                </div>
-                <Button size="sm" className="shrink-0">Join</Button>
-              </div>
-              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <UserAvatar 
-                    src={undefined}
-                    username="ChessMaster"
-                    size="sm"
-                  />
-                  <div>
-                    <p className="font-medium">ChessMaster</p>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-muted-foreground">15+10</span>
-                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded-full">Rapid</span>
-                    </div>
-                  </div>
-                </div>
-                <Button size="sm" className="shrink-0">Join</Button>
-              </div>
-              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <UserAvatar 
-                    src={undefined}
-                    username="SpeedDemon"
-                    size="sm"
-                  />
-                  <div>
-                    <p className="font-medium">SpeedDemon</p>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-sm text-muted-foreground">3+2</span>
-                      <span className="px-2 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-xs rounded-full">Blitz</span>
-                    </div>
-                  </div>
-                </div>
-                <Button size="sm" className="shrink-0">Join</Button>
-              </div>
+              <LobbyPlayerCard
+                username="Player123"
+                avatarUrl={null}
+                timeControl="10 minutes"
+                gameType="Rapid"
+                onJoin={() => console.log('Joining Player123 game')}
+                size="sm"
+              />
+              <LobbyPlayerCard
+                username="ChessMaster"
+                avatarUrl={null}
+                timeControl="15+10"
+                gameType="Rapid"
+                onJoin={() => console.log('Joining ChessMaster game')}
+                size="sm"
+              />
+              <LobbyPlayerCard
+                username="SpeedDemon"
+                avatarUrl={null}
+                timeControl="3+2"
+                gameType="Blitz"
+                onJoin={() => console.log('Joining SpeedDemon game')}
+                size="sm"
+              />
             </div>
           </CardContent>
         </Card>

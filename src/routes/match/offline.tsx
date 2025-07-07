@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -11,8 +11,7 @@ import { GameClock } from '@/components/chess/GameClock'
 import { MoveHistory } from '@/components/chess/MoveHistory'
 import { GameResultModal, type GameResult } from '@/components/chess/GameResultModal'
 import { TimeControlSelector, type TimeControlOption } from '@/components/chess/TimeControlSelector'
-import { UserAvatar } from '@/components/ui/user-avatar'
-import { supabase } from '@/lib/supabaseClient'
+import { useUserProfile, GamePlayerCard } from '@/components/ui/avatar'
 import { ArrowLeft, Upload, Cpu, Zap, Brain } from 'lucide-react'
 import { Chess } from 'chess.js'
 import { STARTING_FEN } from '@/utils/chess'
@@ -115,10 +114,7 @@ function OfflineMatchPage() {
   const [selectedBot, setSelectedBot] = useState<BotProfile | null>(null)
   const [customRating, setCustomRating] = useState([1200])
   const [playerColor] = useState<'white' | 'black'>('white')
-  const [userProfile, setUserProfile] = useState<{
-    username: string
-    avatarUrl: string | null
-  }>({ username: 'You', avatarUrl: null })
+  const { userProfile } = useUserProfile()
   
   // Custom bot form state
   const [customBotName, setCustomBotName] = useState('')
@@ -148,24 +144,7 @@ function OfflineMatchPage() {
   const [selectedTimeControl, setSelectedTimeControl] = useState('10+0')
 
   // Load user profile data
-  useEffect(() => {
-    const loadUserProfile = async () => {
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        if (sessionError || !session?.user) return
-        
-        const user = session.user
-        setUserProfile({
-          username: user.user_metadata?.username || 'You',
-          avatarUrl: user.user_metadata?.avatar_url || null
-        })
-      } catch (error) {
-        console.error('Error loading user profile:', error)
-      }
-    }
-
-    loadUserProfile()
-  }, [])
+  // User profile is now loaded automatically by the useUserProfile hook
 
   const handleStartGame = (bot: BotProfile) => {
     setSelectedBot(bot)
@@ -414,19 +393,12 @@ function OfflineMatchPage() {
                 </div>
                 
                 {/* You always at the bottom */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <UserAvatar 
-                      src={userProfile.avatarUrl}
-                      username={userProfile.username}
-                      size="sm"
-                    />
-                    <span className="font-medium">{userProfile.username}</span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {playerColor === 'white' ? 'White' : 'Black'}
-                  </span>
-                </div>
+                <GamePlayerCard
+                  username={userProfile.username}
+                  avatarUrl={userProfile.avatarUrl}
+                  playerColor={playerColor}
+                  size="sm"
+                />
               </CardContent>
             </Card>
 
