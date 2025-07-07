@@ -140,15 +140,17 @@ function OfflineMatchPage() {
   const [whiteTime, setWhiteTime] = useState(600)
   const [blackTime, setBlackTime] = useState(600)
   const [currentTurn, setCurrentTurn] = useState<'white' | 'black'>('white')
-  const [timeControl, setTimeControl] = useState({ minutes: 10, increment: 0 })
-  const [selectedTimeControl, setSelectedTimeControl] = useState('10+0')
+  const [timeControl, setTimeControl] = useState({ minutes: 0, increment: 0 })
+  const [selectedTimeControl, setSelectedTimeControl] = useState('unlimited')
 
   // Load user profile data
   // User profile is now loaded automatically by the useUserProfile hook
 
   const handleStartGame = (bot: BotProfile) => {
     setSelectedBot(bot)
-    const totalSeconds = timeControl.minutes * 60
+    // Preset bots always have infinite time, custom difficulty bots use selected time control
+    const isPresetBot = PRESET_BOTS.some(presetBot => presetBot.id === bot.id)
+    const totalSeconds = isPresetBot ? 0 : (timeControl.minutes === 0 ? 0 : timeControl.minutes * 60)
     setWhiteTime(totalSeconds)
     setBlackTime(totalSeconds)
     setIsInGame(true)
@@ -268,7 +270,9 @@ function OfflineMatchPage() {
     setGameResult(null)
     setShowResultModal(false)
     setCurrentTurn('white')
-    const totalSeconds = timeControl.minutes * 60
+    // Preset bots always have infinite time, custom difficulty bots use selected time control
+    const isPresetBot = selectedBot && PRESET_BOTS.some(presetBot => presetBot.id === selectedBot.id)
+    const totalSeconds = isPresetBot ? 0 : (timeControl.minutes === 0 ? 0 : timeControl.minutes * 60)
     setWhiteTime(totalSeconds)
     setBlackTime(totalSeconds)
   }
@@ -336,21 +340,23 @@ function OfflineMatchPage() {
                     </Button>
                     <span>vs {selectedBot.name}</span>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <GameClock 
-                      time={playerColor === 'white' ? whiteTime : blackTime} 
-                      isActive={currentTurn === playerColor && !gameResult} 
-                      onTimeUp={() => handleTimeUp(playerColor)}
-                      increment={timeControl.increment}
-                    />
-                    <span className="text-muted-foreground">vs</span>
-                    <GameClock 
-                      time={playerColor === 'white' ? blackTime : whiteTime} 
-                      isActive={currentTurn !== playerColor && !gameResult}
-                      onTimeUp={() => handleTimeUp(playerColor === 'white' ? 'black' : 'white')}
-                      increment={timeControl.increment}
-                    />
-                  </div>
+                  {whiteTime > 0 && blackTime > 0 && (
+                    <div className="flex items-center space-x-2">
+                      <GameClock 
+                        time={playerColor === 'white' ? whiteTime : blackTime} 
+                        isActive={currentTurn === playerColor && !gameResult} 
+                        onTimeUp={() => handleTimeUp(playerColor)}
+                        increment={timeControl.increment}
+                      />
+                      <span className="text-muted-foreground">vs</span>
+                      <GameClock 
+                        time={playerColor === 'white' ? blackTime : whiteTime} 
+                        isActive={currentTurn !== playerColor && !gameResult}
+                        onTimeUp={() => handleTimeUp(playerColor === 'white' ? 'black' : 'white')}
+                        increment={timeControl.increment}
+                      />
+                    </div>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-2 sm:p-4 pb-8 sm:pb-10">

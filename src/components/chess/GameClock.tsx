@@ -30,10 +30,15 @@ export function GameClock({
   useEffect(() => {
     if (!isActive) {
       // Add increment when it's no longer this player's turn
-      if (lastMoveTime !== null && increment > 0) {
+      if (lastMoveTime !== null && increment > 0 && time > 0) {
         setTime(prevTime => prevTime + increment)
       }
       setLastMoveTime(null)
+      return
+    }
+
+    // Don't start timer for infinite time (0)
+    if (time === 0) {
       return
     }
 
@@ -53,10 +58,10 @@ export function GameClock({
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [isActive, onTimeUp, increment, lastMoveTime])
+  }, [isActive, onTimeUp, increment, lastMoveTime, time])
 
-  const isLowTime = time <= 60 // Less than 1 minute
-  const isCriticalTime = time <= 10 // Less than 10 seconds
+  const isLowTime = time <= 60 && time > 0 // Less than 1 minute (but not infinite)
+  const isCriticalTime = time <= 10 && time > 0 // Less than 10 seconds (but not infinite)
 
   const sizeClasses = {
     sm: 'text-sm px-2 py-1',
