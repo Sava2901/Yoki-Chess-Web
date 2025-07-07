@@ -10,20 +10,15 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ProfileRouteImport } from './routes/profile'
-import { Route as MatchRouteImport } from './routes/match'
 import { Route as AnalysisRouteImport } from './routes/analysis'
 import { Route as IndexRouteImport } from './routes/index'
-
-//TODO: add type for route
+import { Route as MatchIndexRouteImport } from './routes/match/index'
+import { Route as MatchOnlineRouteImport } from './routes/match/online'
+import { Route as MatchOfflineRouteImport } from './routes/match/offline'
 
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MatchRoute = MatchRouteImport.update({
-  id: '/match',
-  path: '/match',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnalysisRoute = AnalysisRouteImport.update({
@@ -36,39 +31,81 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MatchIndexRoute = MatchIndexRouteImport.update({
+  id: '/match/',
+  path: '/match/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MatchOnlineRoute = MatchOnlineRouteImport.update({
+  id: '/match/online',
+  path: '/match/online',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MatchOfflineRoute = MatchOfflineRouteImport.update({
+  id: '/match/offline',
+  path: '/match/offline',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
-  '/match': typeof MatchRoute
   '/profile': typeof ProfileRoute
+  '/match/offline': typeof MatchOfflineRoute
+  '/match/online': typeof MatchOnlineRoute
+  '/match': typeof MatchIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
-  '/match': typeof MatchRoute
   '/profile': typeof ProfileRoute
+  '/match/offline': typeof MatchOfflineRoute
+  '/match/online': typeof MatchOnlineRoute
+  '/match': typeof MatchIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/analysis': typeof AnalysisRoute
-  '/match': typeof MatchRoute
   '/profile': typeof ProfileRoute
+  '/match/offline': typeof MatchOfflineRoute
+  '/match/online': typeof MatchOnlineRoute
+  '/match/': typeof MatchIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/analysis' | '/match' | '/profile'
+  fullPaths:
+    | '/'
+    | '/analysis'
+    | '/profile'
+    | '/match/offline'
+    | '/match/online'
+    | '/match'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/analysis' | '/match' | '/profile'
-  id: '__root__' | '/' | '/analysis' | '/match' | '/profile'
+  to:
+    | '/'
+    | '/analysis'
+    | '/profile'
+    | '/match/offline'
+    | '/match/online'
+    | '/match'
+  id:
+    | '__root__'
+    | '/'
+    | '/analysis'
+    | '/profile'
+    | '/match/offline'
+    | '/match/online'
+    | '/match/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnalysisRoute: typeof AnalysisRoute
-  MatchRoute: typeof MatchRoute
   ProfileRoute: typeof ProfileRoute
+  MatchOfflineRoute: typeof MatchOfflineRoute
+  MatchOnlineRoute: typeof MatchOnlineRoute
+  MatchIndexRoute: typeof MatchIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -78,13 +115,6 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/match': {
-      id: '/match'
-      path: '/match'
-      fullPath: '/match'
-      preLoaderRoute: typeof MatchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/analysis': {
@@ -101,14 +131,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/match/': {
+      id: '/match/'
+      path: '/match'
+      fullPath: '/match'
+      preLoaderRoute: typeof MatchIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/match/online': {
+      id: '/match/online'
+      path: '/match/online'
+      fullPath: '/match/online'
+      preLoaderRoute: typeof MatchOnlineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/match/offline': {
+      id: '/match/offline'
+      path: '/match/offline'
+      fullPath: '/match/offline'
+      preLoaderRoute: typeof MatchOfflineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnalysisRoute: AnalysisRoute,
-  MatchRoute: MatchRoute,
   ProfileRoute: ProfileRoute,
+  MatchOfflineRoute: MatchOfflineRoute,
+  MatchOnlineRoute: MatchOnlineRoute,
+  MatchIndexRoute: MatchIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

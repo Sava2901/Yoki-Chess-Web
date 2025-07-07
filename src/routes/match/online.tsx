@@ -16,8 +16,8 @@ import { Plus, Search, Users } from 'lucide-react'
 import { Chess } from 'chess.js'
 import { STARTING_FEN } from '@/utils/chess'
 
-export const Route = createFileRoute('/match')({ 
-  component: MatchPage,
+export const Route = createFileRoute('/match/online')({ 
+  component: OnlineMatchPage,
 })
 
 interface GameState {
@@ -26,7 +26,7 @@ interface GameState {
   pgn: string
 }
 
-function MatchPage() {
+function OnlineMatchPage() {
   const [gameId, setGameId] = useState('')
   const [isInGame, setIsInGame] = useState(false)
   const [playerColor] = useState<'white' | 'black'>('white') // You are playing as white by default
